@@ -1,0 +1,212 @@
+// set up a simple neutral simulation
+initialize() {
+	defineConstant("L", 100);
+	defineConstant("N", 5000);
+	defineConstant("maf", 0.4);
+	defineConstant("sd", 31); //sd 30 for first plot
+	defineConstant("id",asInteger(runif(1,1,100000)));
+	defineConstant("meanout",paste0("./meanfile.txt_",id,".txt"));
+	defineConstant("varout",paste0("./varfile.txt_",id,".txt"));
+	defineConstant("genicout",paste0("D:/bulner_project/genicfile.txt_",id,".txt"));
+	defineConstant("alpha", 1);
+	initializeMutationRate(0);
+	initializeMutationType("m1", 0.5, "f", 0.0);
+
+	m1.convertToSubstitution = F;
+	
+	initializeGenomicElementType("g1", m1, 1.0);
+	initializeGenomicElement(g1, 0, L);
+
+	initializeRecombinationRate(0.5); // this insures the stuff is unlinked
+
+
+	
+}
+
+mutation(m1) {
+	// draw mutational effects for the new m1 mutation
+	effect = sample(c(-1,1),1);
+	mut.setValue("effect_size", effect);
+	
+	return T;
+}
+
+1 early(){
+
+	sim.addSubpop("p1", N);
+	
+	
+	loci_allele_freqs=runif(L+1,0.35,0.45);
+	index=1;
+	for (l in 1:(L/2)) //check boundaries of loop
+	{	
+		//max allele frequency has to be 1/2
+		allele_frequency_counts=asInteger(2*maf*N);//asInteger(runif(1, asInteger(maf*N), asInteger((1-maf)*N)));
+
+		sampledGenomes_locusl = sample(p1.genomes, allele_frequency_counts);
+		new_mut=sampledGenomes_locusl.addNewDrawnMutation(m1, asInteger(l));
+
+		effect =1;
+index=index+1;
+		new_mut.setValue("effect_size", effect);
+	
+	}
+	
+
+index=1;
+	for (l in (L/2):L)
+	{
+		//max allele frequency has to be 1/2
+		aof=runif(1,0.35,0.45);
+		allele_frequency_counts=asInteger(2*loci_allele_freqs[index]*N);//asInteger((2*maf)*N);//asInteger(runif(1, asInteger(maf*N), asInteger((1-maf)*N)));
+
+		sampledGenomes_locusl = sample(p1.genomes, allele_frequency_counts);
+		new_mut=sampledGenomes_locusl.addNewDrawnMutation(m1, asInteger(l));
+		effect =-1;
+		index=index+1;
+		new_mut.setValue("effect_size", effect);
+
+	}
+
+
+}
+
+
+fitnessEffect() {
+	
+	muts = individual.genomes.mutationsOfType(m1);
+	
+	//sub_phenotype = size(subs) ? sum(subs.getValue("effect_size")) else 0.0;
+	mut_phenotype = size(muts) ? sum(muts.getValue("effect_size")) else 0.0;
+	
+	phenotype =  mut_phenotype;//sub_phenotype + mut_phenotype;
+	
+	fitness = dnorm(asFloat(phenotype), 0, sd)*sqrt(2*PI)*sd;
+	
+	return fitness;
+	
+}
+
+
+
+
+
+
+
+
+
+
+// create a population of 500 individuals
+1: late(){
+
+	if (sim.cycle % 1 == 0){
+		//subs = sim.substitutions;
+		//sub_phenotype = size(subs) ? sum(subs.getValue("effect_size")) else 0.0;
+		
+		sum_mut_phenotype = 0;
+		
+		phenotypes=c();
+		
+		for (i in 0:(size(p1.individuals)-1)){
+			
+			ind = p1.individuals[i];
+			muts = ind.genomes.mutationsOfType(m1);
+			mut_phenotype = size(muts) ? sum(muts.getValue("effect_size")) else 0.0;
+			phenotypes=c(phenotypes,mut_phenotype);
+			sum_mut_phenotype = sum_mut_phenotype+ mut_phenotype;
+		
+		}
+		mean_phenotype = sum_mut_phenotype/N ;
+		catn(sim.cycle + ": Mean phenotype == " + mean(phenotypes));
+
+		catn(sim.cycle + ": var phenotype == " + var(phenotypes));
+
+	}
+
+//here i will count the frequency of minor allele 
+
+
+ inds = sim.subpopulations.individuals;
+
+
+aof=c();
+
+
+
+	
+//genic_var=0;
+
+
+	countAlleles = "sum(asInteger(inds.genome1.containsMarkerMutation(m1, applyValue)) + 			asInteger(inds.genome2.containsMarkerMutation(m1, applyValue)));";
+	//countAlleles = "sum(asInteger(inds.genome1.containsMarkerMutation(m1, applyValue)));";
+	// function to count # reference alleles at each locus across all individuals
+	Genos = sapply(1:(L), countAlleles) ;
+	Genos=Genos/(2*N);
+
+
+calc_genicvar="Genos[applyValue]*(1-Genos[applyValue])*2;";
+
+genic_var = sapply(1:(L-1), calc_genicvar) ;
+
+genic_var=sum(genic_var);
+//for(l in 1:(L-1)){
+
+
+//genic_var=genic_var+Genos[l]*(1-Genos[l])*2;
+
+//}
+
+ catn(sim.cycle + ": genic_var  == " + genic_var);
+
+
+file="";
+
+
+file=paste0(file,mean(phenotypes),"\n");
+
+
+writeFile(meanout,file,append=T);
+
+file="";
+
+file=paste0(file,var(phenotypes),"\n");
+
+
+writeFile(varout,file,append=T);
+file="";
+
+file=paste0(file,genic_var,"\n");
+
+
+writeFile(genicout,file,append=T);
+
+
+
+
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// output samples of 10 genomes periodically, all fixed mutations at end
+500 late() { 
+
+
+	sim.simulationFinished();
+}
